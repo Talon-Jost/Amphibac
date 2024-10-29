@@ -8,5 +8,7 @@ Description: Matching sequences of unknown origin to known anti-Batrachochytrium
     Matching by percent identity of 16S rRNA sequences of variable regions (e.g. V4, V5, etc.) from different organisms.
     Adapted from the Woodhams et al. (2015) database of known anti-Bd microbial strains for use of hypothesis generation of anti-Bd potential using sequence composition
 License: What license is it under?
+Imports: Biostrings
 Encoding: UTF-8
 LazyData: true
+RoxygenNote: 7.3.2
