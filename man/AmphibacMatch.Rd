@@ -5,36 +5,17 @@
 AmphibacMatch
 }
 \description{
-%%  ~~ Matching sequences from a provided file type (e.g. .fasta, .fna. .csv, .tsv) to the Woodhams et al. (2015) database.  ~~
+%%  ~~ Matching sequences from a provided dataframe with separate IDs and sequences to the Woodhams et al. (2015) database.
+%%  ~~ Percent identity required for inclusion of final table
 }
 \usage{
 AmphibacMatch(x)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
-  \item{file,
-  file.type = c(
-  tsv   = '.tsv',
-  csv   = '.csv',
-  fna   = '.fna',
-  fasta = '.fasta'
-  ), perc}{
-%%     ~~Describe \code{x} here~~
-file.type = tryCatch
-file.type <- match.arg(type)
+  \item{df,perc}{
 
-  if (type == "tsv") {
-    # Logic for tsv
-    message("You selected option 1")
-  } else if (type == "csv") {
-    # Logic for csv
-    message("You selected option 2")
-  } else if (type == 'fna'){
-  #logic for fna
-  } else {
-    # Logic for fasta
-    message("You selected option 3")
-  }
+
 }
 }
 \details{
