@@ -1,2 +1,10 @@
 ^.*\.Rproj$
 ^\.Rproj\.user$
+^\.git$
+^\.svn$
+^\.DS_Store$
+^\.Rhistory$
+^\.RData$
+^\.Ruserdata$
+^\.Rhistory$
+^\.Rproj\.user$

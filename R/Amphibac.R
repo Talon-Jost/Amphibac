@@ -51,12 +51,7 @@ ReadFasta <- function(fasta) {
   return(fasta_df)
 }
 
-df_trial <- Amphibac::ReadFasta('data/tagr_trial.fasta')
 
-# new_df <- new_sequence_fasta('R_code/trial_fasta.fasta')
-# 
-# amphibac_trail <- new_sequence_fasta('R_code/Amphibian-skin_bacteria_16S_sequences.fasta')
-# write.csv(amphibac_trail, 'amphibac_df.csv', row.names = F)
 
 
 # match given dataframe to Amphibac database.
@@ -89,13 +84,12 @@ AmphibacMatch <- function(df, gap_start = -15, gap = -5, match = 10, mismatch = 
   }
   library(Biostrings)
   match_list <- list()
-  amphibac_file <- system.file('data', 'amphibac_df.csv', package = 'Amphibac')
-  
-  if (!file.exists(amphibac_file)) {
+  amphibac_path_file <- system.file("data", "Amphibac.rda", package = "Amphibac")
+  if (file.exists(amphibac_path_file)) {
+    load(amphibac_path_file)
+  } else {
     stop("Data file not found in the package.")
   }
-  
-  amphibac <- read.csv(amphibac_file, sep = ',')
   
   if (!all(c("ID", "Sequence") %in% colnames(df))) {
     stop("Input data frame must contain 'ID' and 'Sequence' columns.")
@@ -128,7 +122,18 @@ AmphibacMatch <- function(df, gap_start = -15, gap = -5, match = 10, mismatch = 
   return(match_df)
 }
 
-# rm(list = ls())
-# library(Amphibac)
-trial <- Amphibac::AmphibacMatch(df_trial)
 
+#data
+#' Amphibac
+#' 
+#' Amphibac database containing 16S rRNA sequences identified to possess anti-Bd potential.
+#'
+#' @format A .csv data frame with 1944 rows and 3 columns:
+#' \describe{
+#'   \item{variable1}{Description of variable1}
+#'   \item{variable2}{Description of variable2}
+#'   ...
+#' }
+#' @source \url{http://example.com/data-source}
+# 
+"Amphibac"
