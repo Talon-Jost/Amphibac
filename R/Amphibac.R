@@ -84,12 +84,7 @@ AmphibacMatch <- function(df, gap_start = -15, gap = -5, match = 10, mismatch = 
   }
   library(Biostrings)
   match_list <- list()
-  amphibac_path_file <- system.file("data", "Amphibac.rda", package = "Amphibac")
-  if (file.exists(amphibac_path_file)) {
-    load(amphibac_path_file)
-  } else {
-    stop("Data file not found in the package.")
-  }
+  Amphibac <- load('data/Amphibac.rda')
   
   if (!all(c("ID", "Sequence") %in% colnames(df))) {
     stop("Input data frame must contain 'ID' and 'Sequence' columns.")
@@ -100,9 +95,9 @@ AmphibacMatch <- function(df, gap_start = -15, gap = -5, match = 10, mismatch = 
   seqs <- DNAStringSet(seqs)
   
   for (i in seq_along(seqs)) {
-    for (j in seq_along(amphibac$ref_seqs)) {
+    for (j in seq_along(Amphibac$ref_seqs)) {
       seq1 <- seqs[i]
-      seq2 <- DNAString(amphibac$ref_seqs[j])
+      seq2 <- DNAString(Amphibac$ref_seqs[j])
       alignment <- pairwiseAlignment(seq1, seq2,
                                      gapOpening = gap_start,
                                      gapExtension = gap,
@@ -112,7 +107,7 @@ AmphibacMatch <- function(df, gap_start = -15, gap = -5, match = 10, mismatch = 
       alignment_length <- width(alignment)
       percent_identity <- (aligned_matches / alignment_length) * 100
       match_list[[length(match_list) + 1]] <- data.frame(ID1 = ids[i], 
-                                                         ID2 = amphibac$ref_seqs[j],
+                                                         ID2 = Amphibac$ref_seqs[j],
                                                          Score = alignment_score,
                                                          PercentIdentity = percent_identity)
     }
@@ -122,18 +117,22 @@ AmphibacMatch <- function(df, gap_start = -15, gap = -5, match = 10, mismatch = 
   return(match_df)
 }
 
-
-#data
+Amphibac <- read.csv('data/amphibac_df.csv', sep = ',')
+usethis::use_data(Amphibac, overwrite = TRUE) 
+# Documentation using roxygen2
 #' Amphibac
 #' 
 #' Amphibac database containing 16S rRNA sequences identified to possess anti-Bd potential.
 #'
-#' @format A .csv data frame with 1944 rows and 3 columns:
+#' @format A data frame with 1944 rows and 3 columns:
 #' \describe{
 #'   \item{variable1}{Description of variable1}
 #'   \item{variable2}{Description of variable2}
 #'   ...
 #' }
 #' @source \url{http://example.com/data-source}
-# 
+#' @docType data
+#' @name Amphibac
+#' @export
 "Amphibac"
+

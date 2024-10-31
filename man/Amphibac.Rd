@@ -5,7 +5,7 @@
 \alias{Amphibac}
 \title{Amphibac}
 \format{
-A .csv data frame with 1944 rows and 3 columns:
+A data frame with 1944 rows and 3 columns:
 \describe{
   \item{variable1}{Description of variable1}
   \item{variable2}{Description of variable2}
