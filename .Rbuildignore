@@ -8,3 +8,4 @@
 ^\.Ruserdata$
 ^\.Rhistory$
 ^\.Rproj\.user$
+^data-raw$

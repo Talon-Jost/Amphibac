@@ -85,7 +85,7 @@ AmphibacMatch <- function(df, gap_start = -15, gap = -5, match = 10, mismatch = 
   library(Biostrings)
   match_list <- list()
   Amphibac <- load('data/Amphibac.rda')
-  
+  Amphibac <- data("Amphibac")
   if (!all(c("ID", "Sequence") %in% colnames(df))) {
     stop("Input data frame must contain 'ID' and 'Sequence' columns.")
   }
@@ -117,22 +117,21 @@ AmphibacMatch <- function(df, gap_start = -15, gap = -5, match = 10, mismatch = 
   return(match_df)
 }
 
-Amphibac <- read.csv('data/amphibac_df.csv', sep = ',')
-usethis::use_data(Amphibac, overwrite = TRUE) 
-# Documentation using roxygen2
-#' Amphibac
-#' 
-#' Amphibac database containing 16S rRNA sequences identified to possess anti-Bd potential.
+#' Amphibac Dataset
 #'
-#' @format A data frame with 1944 rows and 3 columns:
+#' Dataframe containing anti-batrachochytrium dendrobatidis sequences and the organism they were isolated from
+#'
+#' @format a data frame with 1944 rows and 3 variables:
 #' \describe{
-#'   \item{variable1}{Description of variable1}
-#'   \item{variable2}{Description of variable2}
+#'   \item{species}{the species that the bacterial sequence was originally isolated from}
+#'   \item{isolating_strain}{the name of the strain og the sequence}
+#'   \item{ref_seq}{the sequence from the region of identification}
 #'   ...
 #' }
-#' @source \url{http://example.com/data-source}
+#' @source \url{http://somewhere.important.com/}
 #' @docType data
 #' @name Amphibac
-#' @export
+#' @usage data(Amphibac)
+#' @usage a data frame with 1944 rows and 3 variables
 "Amphibac"
 
