@@ -62,11 +62,13 @@ ReadFasta <- function(fasta) {
 #' This function matches user-provided sequences against a reference database.
 #'
 #' @param df A data frame containing 'ID' and 'Sequence' columns.
-#' @param gap_start The gap opening penalty. Default is -15.
-#' @param gap The gap extension penalty. Default is -5.
-#' @param match The score for a match. Default is 10.
-#' @param mismatch The penalty for a mismatch. Default is -15.
-#' @param database The name of the database. Default is 'amphibac'.
+#' @param perc numerical percentage cutoff for minimum percent identity match in results df. Default is 0.
+#' @param score a numerical cutoff for alignment score in results df. Default is 0.
+#' @param gap_start The gap opening penalty. Default is 0.
+#' @param gap The gap extension penalty. Default is 3.
+#' @param match The score for a match. Default is 1.
+#' @param mismatch The penalty for a mismatch. Default is -3.
+#' @param database The name of the database to be used to compare df sequences against. Default is 'amphibac'.
 #'
 #' @return A data frame with alignment results.
 #'
@@ -78,14 +80,14 @@ ReadFasta <- function(fasta) {
 #'
 #' @export
 #' 
-AmphibacMatch <- function(df, gap_start = -15, gap = -5, match = 10, mismatch = -15, database = 'amphibac') {
+AmphibacMatch <- function(df, perc = 0, score = 0, gap_start = 0, gap = 3, 
+                          match = 1, mismatch = -3, database = 'amphibac') {
   if (!requireNamespace("Biostrings", quietly = TRUE)) {
     stop("The Biostrings package is required. Please install it using install.packages('Biostrings').")
   }
   library(Biostrings)
   match_list <- list()
-  Amphibac <- load('data/Amphibac.rda')
-  Amphibac <- data("Amphibac")
+  load("data/Amphibac.rda")
   if (!all(c("ID", "Sequence") %in% colnames(df))) {
     stop("Input data frame must contain 'ID' and 'Sequence' columns.")
   }
@@ -93,28 +95,35 @@ AmphibacMatch <- function(df, gap_start = -15, gap = -5, match = 10, mismatch = 
   ids <- df$ID
   seqs <- as.character(df$Sequence)
   seqs <- DNAStringSet(seqs)
+  ids2 <- Amphibac$species
+  seqs2 <- DNAStringSet(Amphibac$ref_seq)
   
   for (i in seq_along(seqs)) {
-    for (j in seq_along(Amphibac$ref_seqs)) {
+    for (j in seq_along(seqs2)) {
       seq1 <- seqs[i]
-      seq2 <- DNAString(Amphibac$ref_seqs[j])
-      alignment <- pairwiseAlignment(seq1, seq2,
-                                     gapOpening = gap_start,
-                                     gapExtension = gap,
-                                     substitutionMatrix = nucleotideSubstitutionMatrix(match = match, mismatch = mismatch, baseOnly = TRUE))
+      seq2 <- seqs2[j]
+      alignment <- pwalign::pairwiseAlignment(seq1, seq2,
+                                              gapOpening = gap_start,
+                                              gapExtension = gap,
+                                              substitutionMatrix = pwalign::nucleotideSubstitutionMatrix(match = match, mismatch = mismatch, baseOnly = FALSE))
       alignment_score <- score(alignment)
       aligned_matches <- nmatch(alignment)
-      alignment_length <- width(alignment)
+      alignment_length <- nchar(alignment)
       percent_identity <- (aligned_matches / alignment_length) * 100
-      match_list[[length(match_list) + 1]] <- data.frame(ID1 = ids[i], 
-                                                         ID2 = Amphibac$ref_seqs[j],
+      match_list[[length(match_list) + 1]] <- data.frame(df_ids = ids[i],
+                                                         seq = seqs[i],
+                                                         Amphibac_ids = ids2[j],
+                                                         ref_seq = seqs2[j],
                                                          Score = alignment_score,
-                                                         PercentIdentity = percent_identity)
+                                                         Percent_Identity = percent_identity)
     }
   }
   
   match_df <- do.call(rbind, match_list)
-  return(match_df)
+  match_df <- match_df[order(match_df$Percent_Identity, decreasing = TRUE), , drop = FALSE]
+  # match_df <- subset(match_df, Percent_Identity > perc & Score > score)
+  
+  as.data.frame(match_df)
 }
 
 #' Amphibac Dataset
@@ -134,4 +143,3 @@ AmphibacMatch <- function(df, gap_start = -15, gap = -5, match = 10, mismatch = 
 #' @usage data(Amphibac)
 #' @usage a data frame with 1944 rows and 3 variables
 "Amphibac"
-

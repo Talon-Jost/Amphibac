@@ -6,25 +6,31 @@
 \usage{
 AmphibacMatch(
   df,
-  gap_start = -15,
-  gap = -5,
-  match = 10,
-  mismatch = -15,
+  perc = 0,
+  score = 0,
+  gap_start = 0,
+  gap = 3,
+  match = 1,
+  mismatch = -3,
   database = "amphibac"
 )
 }
 \arguments{
 \item{df}{A data frame containing 'ID' and 'Sequence' columns.}
 
-\item{gap_start}{The gap opening penalty. Default is -15.}
+\item{perc}{numerical percentage cutoff for minimum percent identity match in results df. Default is 0.}
 
-\item{gap}{The gap extension penalty. Default is -5.}
+\item{score}{a numerical cutoff for alignment score in results df. Default is 0.}
 
-\item{match}{The score for a match. Default is 10.}
+\item{gap_start}{The gap opening penalty. Default is 0.}
 
-\item{mismatch}{The penalty for a mismatch. Default is -15.}
+\item{gap}{The gap extension penalty. Default is 3.}
 
-\item{database}{The name of the database. Default is 'amphibac'.}
+\item{match}{The score for a match. Default is 1.}
+
+\item{mismatch}{The penalty for a mismatch. Default is -3.}
+
+\item{database}{The name of the database to be used to compare df sequences against. Default is 'amphibac'.}
 }
 \value{
 A data frame with alignment results.
