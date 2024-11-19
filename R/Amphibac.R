@@ -81,31 +81,57 @@ ReadFasta <- function(fasta) {
 #' @export
 #' 
 AmphibacMatch <- function(df, perc = 0, score = 0, gap_start = 0, gap = 3, 
-                          match = 1, mismatch = -3, database = 'amphibac') {
+                          match = 1, mismatch = -3, database = NULL) {
   if (!requireNamespace("Biostrings", quietly = TRUE)) {
-    stop("The Biostrings package is required. Please install it using install.packages('Biostrings').")
+    stop("The Biostrings package is required. Please install it using BiocManager::install('Biostrings').")
   }
   library(Biostrings)
   match_list <- list()
-  load("data/Amphibac.rda")
+
+  # Available databases with file paths
+  available_databases <- list(
+    Amphibac = "data/Amphibac.rda", 
+    AmphiBac_2023.2_Full = getdata(AmphiBac_2023.2_Full), 
+    AmphiBac_2023.2_StrictInhibitory = load("data/AmphiBac_2023.2_StrictInhibitory.rda"),
+    AmphiBac_2023.2_Inhibitory = load('data/AmphiBac_2023.2_Inhibitory.rda'),
+    AmphiBac_2023.2_Facilitating = load('data/AmphiBac_2023.2_Facilitating.rda')
+  )
+  
+  # Prompt user for database selection if not provided
+  if (is.null(database)) {
+    choice <- menu(names(available_databases), title = "Select a database:")
+    if (choice == 0) stop("No database selected.")
+    database <- names(available_databases)[choice]
+  }
+  
+  # Validate database selection
+  if (!(database %in% names(available_databases))) {
+    stop(paste("Invalid database. Please choose from:", paste(names(available_databases), collapse = ", ")))
+  }
+  
+  # Load the selected database file
+  load(available_databases[[database]])
+
+  # Ensure 'ID' and 'Sequence' columns exist in the input data frame
   if (!all(c("ID", "Sequence") %in% colnames(df))) {
     stop("Input data frame must contain 'ID' and 'Sequence' columns.")
   }
   
+  # Extract sequences and IDs from input and database
   ids <- df$ID
-  seqs <- as.character(df$Sequence)
-  seqs <- DNAStringSet(seqs)
-  ids2 <- Amphibac$species
-  seqs2 <- DNAStringSet(Amphibac$ref_seq)
+  seqs <- DNAStringSet(as.character(df$Sequence))
+  ids2 <- Amphibac_data$species
+  seqs2 <- DNAStringSet(Amphibac_data$ref_seq)
   
+  # Perform pairwise alignment
   for (i in seq_along(seqs)) {
     for (j in seq_along(seqs2)) {
       seq1 <- seqs[i]
       seq2 <- seqs2[j]
-      alignment <- pwalign::pairwiseAlignment(seq1, seq2,
-                                              gapOpening = gap_start,
-                                              gapExtension = gap,
-                                              substitutionMatrix = pwalign::nucleotideSubstitutionMatrix(match = match, mismatch = mismatch, baseOnly = FALSE))
+      alignment <- pairwiseAlignment(seq1, seq2,
+                                     gapOpening = gap_start,
+                                     gapExtension = gap,
+                                     substitutionMatrix = nucleotideSubstitutionMatrix(match = match, mismatch = mismatch, baseOnly = FALSE))
       alignment_score <- score(alignment)
       aligned_matches <- nmatch(alignment)
       alignment_length <- nchar(alignment)
@@ -119,12 +145,14 @@ AmphibacMatch <- function(df, perc = 0, score = 0, gap_start = 0, gap = 3,
     }
   }
   
+  # Compile and filter results
   match_df <- do.call(rbind, match_list)
   match_df <- match_df[order(match_df$Percent_Identity, decreasing = TRUE), , drop = FALSE]
-  # match_df <- subset(match_df, Percent_Identity > perc & Score > score)
+  match_df <- subset(match_df, Percent_Identity > perc & Score > score)
   
   as.data.frame(match_df)
 }
+
 
 #' Amphibac Dataset
 #'
@@ -143,3 +171,108 @@ AmphibacMatch <- function(df, perc = 0, score = 0, gap_start = 0, gap = 3,
 #' @usage data(Amphibac)
 #' @usage a data frame with 1944 rows and 3 variables
 "Amphibac"
+
+
+
+#' AmphiBac_2023.2_Facilitating Dataset
+#'
+#' Dataframe containing facilitory sequences and the organism they were isolated from
+#'
+#' @format a data frame with 597 rows and 2 variables:
+#' \describe{
+#'   \item{species}{the species that the bacterial sequence was originally isolated from}
+#'   \item{isolating_strain}{the name of the strain og the sequence}
+#'   \item{ref_seq}{the sequence from the region of identification}
+#'   ...
+#' }
+#' @source \url{http://somewhere.important.com/}
+#' @docType data
+#' @name AmphiBac_2023.2_Facilitating
+#' @usage data(AmphiBac_2023.2_Facilitating)
+#' @usage a data frame with 597 rows and 2 variables
+"AmphiBac_2023.2_Facilitating"
+
+
+
+
+#' Amphibac Dataset
+#'
+#' Dataframe containing anti-batrachochytrium dendrobatidis sequences and the organism they were isolated from
+#'
+#' @format a data frame with 1944 rows and 3 variables:
+#' \describe{
+#'   \item{species}{the species that the bacterial sequence was originally isolated from}
+#'   \item{isolating_strain}{the name of the strain og the sequence}
+#'   \item{ref_seq}{the sequence from the region of identification}
+#'   ...
+#' }
+#' @source \url{http://somewhere.important.com/}
+#' @docType data
+#' @name Amphibac
+#' @usage data(Amphibac)
+#' @usage a data frame with 1944 rows and 3 variables
+"Amphibac"
+
+
+#' AmphiBac_2023.2_Full Dataset
+#'
+#' Dataframe containing all sequences contained within the AmphiBac database and the organism they were isolated from
+#'
+#' @format a data frame with 7927 rows and 2 variables:
+#' \describe{
+#'   \item{species}{the species that the bacterial sequence was originally isolated from}
+#'   \item{isolating_strain}{the name of the strain og the sequence}
+#'   \item{ref_seq}{the sequence from the region of identification}
+#'   ...
+#' }
+#' @source \url{http://somewhere.important.com/}
+#' @docType data
+#' @name AmphiBac_2023.2_Full
+#' @usage data(AmphiBac_2023.2_Full)
+#' @usage a data frame with 7927 rows and 2 variables
+"AmphiBac_2023.2_Full"
+
+######################
+
+#' AmphiBac_2023.2_Inhibitory Dataset
+#'
+#' Dataframe containing all sequences contained within the AmphiBac database and the organism they were isolated from
+#'
+#' @format a data frame with 2518 rows and 2 variables:
+#' \describe{
+#'   \item{species}{the species that the bacterial sequence was originally isolated from}
+#'   \item{isolating_strain}{the name of the strain og the sequence}
+#'   \item{ref_seq}{the sequence from the region of identification}
+#'   ...
+#' }
+#' @source \url{http://somewhere.important.com/}
+#' @docType data
+#' @name AmphiBac_2023.2_Inhibitory
+#' @usage data(AmphiBac_2023.2_Inhibitory)
+#' @usage a data frame with 2518 rows and 2 variables
+"AmphiBac_2023.2_Inhibitory"
+
+########################
+
+
+#' AmphiBac_2023.2_StrictInhibitory Dataset
+#'
+#' Dataframe containing all sequences contained within the AmphiBac database and the organism they were isolated from
+#'
+#' @format a data frame with 2056 rows and 2 variables:
+#' \describe{
+#'   \item{species}{the species that the bacterial sequence was originally isolated from}
+#'   \item{isolating_strain}{the name of the strain og the sequence}
+#'   \item{ref_seq}{the sequence from the region of identification}
+#'   ...
+#' }
+#' @source \url{http://somewhere.important.com/}
+#' @docType data
+#' @name AmphiBac_2023.2_StrictInhibitory
+#' @usage data(AmphiBac_2023.2_StrictInhibitory)
+#' @usage a data frame with 2056 rows and 2 variables
+"AmphiBac_2023.2_StrictInhibitory"
+
+
+
+

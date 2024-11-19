@@ -12,7 +12,7 @@ AmphibacMatch(
   gap = 3,
   match = 1,
   mismatch = -3,
-  database = "amphibac"
+  database = NULL
 )
 }
 \arguments{
