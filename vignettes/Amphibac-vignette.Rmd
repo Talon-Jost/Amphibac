@@ -1,0 +1,86 @@
+---
+title: "Amphibac-vignette"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Amphibac-vignette}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(Amphibac)
+library(tidyverse)
+library(pwalign)
+load(system.file('data', 'AmphiBac_2023.2_StrictInhibitory', package = 'Amphibac'))
+```
+
+
+```{r matrix}
+set.seed(0001)
+
+Sample.ID <- c('SAMPLE1', 'SAMPLE2', 'SAMPLE3', 'SAMPLE4', 'SAMPLE5')
+OTU.ID <- c('OTU1', 'OTU2', 'OTU3', 'OTU4', 'OTU5')
+
+rand.mat <- matrix(sample(0:100, length(Sample.ID) * length(OTU.ID), replace = TRUE),
+                   nrow = length(Sample.ID),
+                   ncol = length(OTU.ID))
+
+otu.table <- data.frame(Sample.ID = Sample.ID, rand.mat)
+colnames(otu.table)[-1] <- OTU.ID
+rownames(otu.table) <- otu.table$Sample.ID
+
+otu.table <- otu.table[, -1]
+
+print(otu.table)
+```
+
+this just makes sure that there's no issues with the dataframe and eliminates any columns that don't have any observations which will reduce computation time
+```{r relative}
+otu.table <- otu.table %>% 
+  select_if(~ !is.numeric(.) || sum(.) != 0)  
+
+rel_ab_table <- otu.table / rowSums(otu.table) * 100
+print(rel_ab_table)
+ %>% # Wide format for ranks
+  rename(
+    Domain = d,
+    Phylum = p, 
+    Class = c,
+    Order = o, 
+    Family = f, 
+    Genus = g, 
+    Species = s
+  )
+```
+
+using the Amphibac database
+matching to the database using the strict database. this function provides users with control over how the database should perform and what results the function will return in terms of sequence matching. This function allows the user to control the percent identity match threshold using 'perc = x', where x is the number which the user desires to keep the results above. The nucleotide substitution matrix can be customized using flags for gap, gap_start, match, and mismatch, but all have defaults which will change the score that is returned to the user. the 'ver' flag is the version of the Amphibac database that is used by the function, the default for this function is the most recently released Amphibac database. Please report the database that is used even if the flag is left to default. ::see options for details on database version:: 
+
+```{r load}
+#loading in the Amphibac database and Using a subset
+load(system.file('data', 'AmphiBac_2023.2_StrictInhibitory', package = 'Amphibac'))
+```
+
+```{r amp}
+sub_amphibac <- Amphibac::AmphiBac_2023.2_StrictInhibitory
+
+sub_amphibac <- sub_amphibac  %>% 
+  top_n(5, ID)
+#matching created matrix to amphibac sequences
+#this dataframe will be provided by the user and need to have the OTUid header of ID and 'sequence' as the sequence heading
+user_df <- data.frame(OTU.ID, sub_amphibac$Sequence)
+user_df <- user_df %>% 
+  rename(OTU.ID = 'ID') %>% 
+  rename(sub_amphibac.Sequence = 'Sequence')
+
+#Assigning the amphibac function to a variable allows for further use of the table if desired and allows for further inspection in a dataframe format. This format will take the users provided dataframe and pass it into the strict version of the AmphiBac database with two further restricting parameters - a required >99% ID match, and returning only the top three results for each user provided OTU where 'k=3'.
+results <- Amphibac::AmphibacMatch_Strict(user_df, perc = 99, k = 3)
+
+```

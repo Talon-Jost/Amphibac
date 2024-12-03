@@ -7,12 +7,14 @@
 AmphibacMatch(
   df,
   perc = 0,
+  k = 0,
   score = 0,
   gap_start = 0,
   gap = 3,
   match = 1,
   mismatch = -3,
-  database = NULL
+  database = NULL,
+  ver = "2023"
 )
 }
 \arguments{
