@@ -1,0 +1,9 @@
+#SampleID	Assay Type	AvgSpotLen	Bases	BioProject	BioSample	BioSampleModel	Bytes	Center Name	Collection_Date	Consent	DATASTORE filetype	DATASTORE provider	DATASTORE region	Experiment	geo_loc_name_country	geo_loc_name_country_continent	geo_loc_name	Genus	Species	Instrument	isolation_source	lat_lon	Library Name	LibraryLayout	LibrarySelection	LibrarySource	Organism	Platform	ReleaseDate	Sample Name	source_material_id	SRA Study	create_date	version
+baroni																																		
+aurantiaca																																		
+milotympanum																																		
+ebenaui																																		
+crocea																																		
+laevigata																																		
+expectata																																		
+cowani																																		
