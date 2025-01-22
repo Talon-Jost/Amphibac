@@ -1,0 +1,906 @@
+---
+title: "user_manual"
+author: "Talon Jost"
+date: "2024-12-12"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(Biostrings)
+library(crayon)
+library(pbapply)
+library(tidyverse)
+library(ps)
+library(parallel)
+library(Amphibac)
+library(rbiom)
+```
+
+The primary goal of the AmphiBac R package is simplicity in integration of files and materials derived from common outside bioinformatics programs (e.g. QIIME2) to an R environment where that information can be assessed by a user friendly workflow. This manual will outline the functionality of the AmphiBac package, necessary inputs, and outputs of each function contained therein.
+
+# *Function 1. ReadFasta*
+This function is not unique to the AmphiBac package; however, this self-contained function will certify that a provided fasta file will be in the correct format for any uses in downstream processing done by the AmphiBac package. There is no need to load in another package to read the fasta into the R environment and then make subsequent changes to ensure proper formatting for successful execution of future functions within the package. operations within this function are base R compatible and don't require any other packages to function.
+
+A user would take the filepath of a fasta file (i.e. a file that is in a .fasta or .fna format) that is *not* compressed and feed it into the function. No other inputs are needed or are available for this function. This function also eliminates any rows that are NA or have no content in them automatically to save on potential unnecessary space utilization. an R environment dataframe would be returned if executed, which would be editable and interactive if desired. 
+
+```{r readfasta}
+#' ReadFasta
+#' 
+#' This function reads a FASTA file and formats it for use with the Amphibac search function.
+#' 
+#' @param fasta The path to the FASTA file.
+#' @return A data frame containing species, isolating strain, and sequences.
+#' @export
+#this is to load in a fasta file and format it for use with the amphibac search function
+ReadFasta <- function(fasta) {
+  read_lines <- readLines(fasta)
+  original_species <- c()
+  isolating_strain <- c()
+  sequences <- c()
+  headers <- c()
+  current_seq <- ""
+  
+  #this is reading in to make sure the file is not empty, and check to see if the carat operator is present in the document to obtain the sequences. 
+  for (line in read_lines) {
+    if (startsWith(line, '>')) {
+      if (current_seq != '') {
+        sequences <- c(sequences, current_seq)
+        current_seq <- ''
+      }
+      headers <- c(headers, line)
+      
+      # Split header and handle cases without "-"
+      cleaned_header <- gsub('>', '', line)
+      split_header <- unlist(strsplit(cleaned_header, "-"))
+      
+      # Extract original species and isolating strain if available
+      original_species <- c(original_species, split_header[1])
+      isolating_strain <- c(isolating_strain, ifelse(length(split_header) > 1, split_header[2], NA))
+      
+    } else {
+      current_seq <- paste0(current_seq, line)
+    }
+  }
+  
+  if (current_seq != "") {
+    sequences <- c(sequences, current_seq)
+  }
+  
+  #output results to a dataframe that will be returned to the user in this format
+  #ID is the 'original_species' (this is an artifact naming scheme that I did not change from a previous fasta that had an species column)
+  fasta_df <- data.frame(
+    ID = original_species,
+    isolating_strain = isolating_strain,
+    Sequence = sequences,
+    
+    stringsAsFactors = FALSE #This is necessary to make sure the function is read in correctly as strings and not as anything else
+  )
+  
+  #Returning the fasta file to a dataframe format which can be viewed and manipulated in R if needed.
+  fasta_df <- fasta_df[, colSums(!is.na(fasta_df)) > 0]
+  return(fasta_df)
+}
+```
+
+
+
+# *Function 2. read.qza*
+
+This function was designed with a QIIME2 specific file format in mind that is useful for taking direct outputs from the user's pipeline without needing to be converted into a particular format, or conducting any exporting processes within the QIIME2 environment. This function automatically takes the filepath provided and decompresses it, this allows the computer to find .biom file contained within. This function does require the use of the 'rbiom' package that is readily available for download if it is not already installed. tidyverse is also required for this function. The function provides a tmp folder which can later be deleted or accessed depending on the desire of the user. 
+
+In conclusion, what is provided is a QIIME2 derived otu_table.qza that is decompressed and the .biom file read into the R environment. This automatically formats the otu to the necessary format concerning rownames and matrix orientation for later analyses in the R package. 
+
+(This function also contains a benchmarking tool that can be accessed by attr(result$time, 'elapsed'))
+
+```{r pressure, echo=FALSE}
+#
+#
+#' read.qza
+#' 
+#' This function reads a .qza file derived from QIIME2 and delivers a editable dataframe in the r environment
+#' 
+#' @param qza The path to the FASTA file.
+#' @return A data frame from a QIIME2 derived relative frequency table
+#' 
+#' @import rbiom
+#' @import tidyverse
+#' 
+#' @export
+#this is to load in a fasta file and format it for use with the amphibac search function
+
+read.qza <- function(file) {
+  start <- proc.time()
+  unzipped_file <- unzip(file)
+  biom_path <- file.path(dirname(unzipped_file[1]), 'data')
+  biom_ending <- '\\.biom'
+  
+  find_files_with_ending <- function(folder, file_ending) {
+    # Validate the folder path or return a stop error
+    if (!dir.exists(folder)) {
+      stop("The specified folder does not exist.")
+    }
+    
+    # Search for files with the given ending
+    matching_files <- list.files(
+      path = folder,
+      pattern = paste0(file_ending, "$"), # Regex to match the file ending
+      full.names = TRUE                  # Include full file paths
+    )
+    return(matching_files)
+  }
+  biom_table <- find_files_with_ending(biom_path, biom_ending)
+  otu <- read.biom(biom_table)
+  mat <- as.matrix(otu$count)
+  mat2 <- as.data.frame(mat)
+  final_mat <- mat2 %>%
+    select_if(~ !is.numeric(.) || sum(.) != 0)
+  
+  #artifact comment
+  #this package decompresses the folder and leaves the folder in the directory. need to figure out how to delete that automatically, or perhaps use a tmp
+  unlink(dirname(unzipped_file[1]), recursive = TRUE)
+  time <- (proc.time() - start)
+  attr(final_mat, "time") <- time["elapsed"]
+  return(final_mat)
+}
+
+```
+
+*NOTE*
+The AmphibacMatch function will not work with a .qza which has been run through the 'read.qza' function. The reason for this is because of the tmp directory deletion expressed in the function. To keep things tidy and not have decompressed files laying about, the final version may look slightly different in the full AmphibacMatch function to retain the files in the directory until the end, but this is necessary for the function to access the decompressed .qza file later on.
+
+# **Function 3. AmphibacMatch**
+This is the main function of the AmphiBac package and is the most likely part to take up significant computation power and time. With the user providing only one piece of information for this, it is quite simple to run on its own. 
+
+The main input is the fasta file imported through ReadFasta that will already be in the correct format. the 'perc' flag is short for percent identity, or the threshold by which the function will decide to keep or reject a potential match to the AmphiBac database. a 99% identity threshold is set, then anything less than a 99% alignment match will be discarded from the results. The 'score' flag is in reference to the alignment score that is calculated by the alignment function to indicate the total quality of the match. The default on the score flag is zero to indicate that any result that returns which is greater than zero will be retained. The 'ver' tag, short for version, is the desired version of the AmphiBac database to use as the reference database to be compared against during the alignment to produce the results.
+
+This step represents the predominant purpose of this package, and thus requires the most scrutiny in terms of design and potential for frustration of the user. Thus, we warn our users that significantly large dataframe can necessitate significant amounts of time to complete. a dataframe containing several hundred sequences may only take a few minutes to complete, but a dataframe of more numerous sequences may take hours. 
+
+There are checks at the beginning and along the way to make sure that the process is moving smoothly, and also is not expending unnecessary time or resources on NULL results or empty dataframes. 
+
+Several packages are needed for this package to work including: 
+
+- library(Biostrings) #to turn our character strings to DNA sequences
+- library(crayon) #for colors to indicate importance in the console
+- library(pbapply) #also for our strings
+- library(tidyverse) #for piping
+- library(ps) #for strings
+- library(parallel) #for an attempt to reduce computation time, may not fully work on windows?
+- library(Amphibac) #our package
+- library(rbiom) #for pwalign
+
+The reason for the use of the packages are to not have to re-code ground that has already been exceptionally conquered. While this presents a potential to be a frustrating step for users if they do not have some required packages, it is necessary for the successful and compact deployment of the AmphiBac package. 
+
+## Set Variables: pwalign
+This portion of the code is critical to understand how the score is calculated by pwalign. these values are used to reward matching nucleotides, and punish mismatches and gaps. These values are not critical for the user to understand in depth, but can be enlightening for those who desire to evaluate the performance of the package or their sequences. These are the base values used by BLASTn nucleotide search, as the package is intended to be as closely related to perfomance of BLASTn and VSEARCH.
+
+*default values:*
+1.  gap_start = 5 
+2.  gap = -2 
+3.  match = 1 
+4.  mismatch = -3
+
+## *Slice Variable: k*
+This value is still present in the code but is a vestigial piece, with potential for exaptation. Originally it was intended to allow the user to select the number of matches that the function would return in the resulting dataframe, but would only initiate if the default flag 'k' was greater than one; however, through the evolution of this package it would not correctly execute if more than a value of one was assigned and would not work in the subsequent analysis. 
+
+*default value:* 
+1. k = 1.
+
+associated vestigial code:
+if (k == 1) {
+    match_df <- match_df %>%
+      group_by(Input_ID) %>%
+      slice_head(n = k) %>%
+      ungroup()
+  }
+
+This code; however, retains its potential depending on the future direction of the package as user customization could be desired in later versions. The main issue with this snippet is that I haven't coded in the ability to have more than one output to be able to be matched to the database and calculated for relative abundance. Perhaps there's utility for another output for the matches themselves to be analyzed separately as say top 5 matches (arbitrary). Currently, this code remains vestigial but has potential.
+
+## Biostrings Actions
+Biostrings has been useful in allowing this package to function. Mutating our character sets of DNA characters to a DNAStringSet allows them to be used in the alignment operation. 
+
+## **Note: the act of using DNAStringSet is critical in the sequence alignment step.**
+
+## **Parallelization**
+This function is incredibly expensive to run on a computer if not done properly as searching one by one in a dataframe of tens of thousands of reference sequences takes some time. So in hopes of making the process more efficient, the package parallel was deployed in this version. The functions detects the number of cores the system has and will partition the work appropriately to those available cores. It does this by making clusters, and not just clusters, but a cluster of the reference sequence to be matched against the reference database. Meaning that the memory of the computer will not have to re-access the dataframe in each iteration of the operation, rather it will continue to hold that sequence *in reserve* for faster execution of an alignment.
+
+This does increase the burden of the function on the memory of the system, but ultimately will lead to quicker results and reduce reliance on the CPU - hopefully.
+
+## **Sequence Alignment**
+The sequence alignment in this iteration is performed by pwalign::nucleotideSubstitutionMatrix. The previous step of changing our sequences to DNAStingSets allows input into the alignment, however a problem exists in this step that is of necessity to announce. There are several reference sequences that contain characters not strictly associated with DNA, such as *Y* or *G*, but these can be common in returns from sequencing facilities. Due to these deviation, the baseOnly flag on the operation MUST be set to false to operate properly. Whether this act changes the fundamental intepretations of the results is not currently known, but to the best of my ability to understand it does not fundamentally change anything. Although this does not eliminate the potential of this action to change significant results.
+
+## **Percent Identity**
+The critical aspect of the AmphibacMatch operation is to, well, match. To accomplish this goal, we simply look at the percentage of matching nucleotides of one sequence to a reference sequence. This fundamentally relies on a variety of factors that are outside of the scope of this package; however, within this package is the potential for bias in the results. 
+
+The pwalign package offers four options according to the reference manual which are as follows:
+1. "PID1": 100 x (identical positions) / (aligned positions + internal gap positions)
+2. "PID2": 100 x (identical positions) / (aligned positions)
+3. "PID3": 100 x (identical positions) / (length shorter sequence)
+4. "PID4": 100 x (identical positions) / (average length of the two sequences)
+
+Not much more is offered by the reference manual of the package in terms of understanding what the benefits or consequences are to a particular method of calculation due to various definitions. Therefore as the authors of the pwalign package, we refer to their default of *PID1* and acknowledge the potential of this choice to change given further information. This is not a decision we have left to the users currently as we don't know the full ramification of other calculation methods.
+
+## **Benchmarking**
+Keeping track of how well the package is perfmorming is of interest in the first iterations of this package. An intrinsic performance data collecting code has been employed in the first draft of this package to allow for analysis. This code is not necessary to the functioning of the package itself and can be readily deleted and is not intended to obtain any personal or confidential information about the user. The information is stored in a log file in the AmphiBac package that can be easily accessed by the user if desired. It provides runtime, max memory usage, and other baseline information about the deployment of the function. 
+```{r match_function}
+# match given dataframe to Amphibac database.
+# file structure should include separate ID column and sequence to be called within the function
+# perc is percent identity match desired within table output
+#' AmphibacMatch_Strict_clustered
+#'
+#' This function matches user-provided sequences against a reference database.
+#'
+#' @param df A data frame containing 'ID' and 'Sequence' columns.
+#' @param perc numerical percentage cutoff for minimum percent identity match in results df. Default is 0.
+#' @param score a numerical cutoff for alignment score in results df. Default is 0.
+#' @param ver The year of the database to be used to compare df sequences against. Default is '2023.2' or the newest version of the database that is available at the time of release of that package version.
+#'
+#' @return A data frame with alignment results.
+#'
+#' @import Biostrings
+#' @import crayon
+#' @import pbapply
+#' @import tidyverse
+#'
+#' @examples
+#' user_df <- data.frame(ID = c("seq1", "seq2"), Sequence = c("ATCG", "AAGC"))
+#' result <- AmphibacMatch_Strict_clustered(user_df)
+#'
+#' @export
+#' 
+AmphibacMatch_Strict_clustered <- function(df, perc = 0, score = 0, ver = '2023') {
+  
+  #warning on df size if necessary. 100 seems to be a nice round number to do this with
+  if (nrow(df) >= 100) {
+    message(red("The data frame has more than 100 rows. This can significantly increase computation time"))
+    message('Do you wish to continue?')
+    continue <- readline(prompt = "Type 'yes' to continue or 'no' to stop: ")
+    
+    if (tolower(continue) != "yes") {
+      stop("Process stopped by user.")
+    }
+  }
+  start <- proc.time()
+  
+  # Check required packages
+  if (!requireNamespace("Biostrings", quietly = TRUE)) {
+    stop("The Biostrings package is required. Please install it using BiocManager::install('Biostrings').")
+  }
+  if (!requireNamespace("crayon", quietly = TRUE)) {
+    stop("The crayon package is required. Please install it using install.packages('crayon').")
+  }
+  if (!requireNamespace("pbapply", quietly = TRUE)) {
+    stop("The pbapply package is required. Please install it using install.packages('pbapply').")
+  }
+  if (!requireNamespace("tidyverse", quietly = TRUE)) {
+    stop("The tidyverse package is required. Please install it using install.packages('tidyverse').")
+  }
+  if (!requireNamespace("ps", quietly = TRUE)) {
+    stop("The ps package is required. Please install it using install.packages('ps').")
+  }
+  if (!requireNamespace("parallel", quietly = TRUE)) {
+    stop("The parallel package is required. Please install it using install.packages('parallel').")
+  }
+  
+  library(Biostrings)
+  library(crayon)
+  library(pbapply)
+  library(tidyverse)
+  library(parallel)
+  library(ps)
+  
+  # Ensure the input dataframe has the necessary columns
+  if (!all(c("ID", "Sequence") %in% colnames(df))) {
+    stop("Input data frame must contain 'ID' and 'Sequence' columns.")
+  }
+  
+  # Set variables, not available for change to the user, but can be easily implemented into the code and was in previous versions of the package.
+  gap_start = 5 
+  gap = -2 
+  match = 1 
+  mismatch = -3
+  k = 1
+  
+  # Convert sequences to DNAStringSet. This allows for use in the alignment step, otherwise they're just read into R as character strings - which is not useful for the package. 
+  ids <- df$ID
+  seqs <- DNAStringSet(as.character(df$Sequence))
+  ids2 <- Amphibac$species
+  seqs2 <- DNAStringSet(Amphibac$ref_seq)
+  
+  # Create a cluster with the desired number of cores
+  cl <- makeCluster(detectCores() - 1)  # Use all but 1 core. Currently the best usage statistics.
+  
+  # Define the pairwise alignment function
+  align_sequences <- function(i, j, seqs, seqs2, ids, ids2, gap_start, gap, match, mismatch, perc_threshold) {
+    alignment <- pairwiseAlignment(
+      seqs[i], seqs2[j],
+      gapOpening = gap_start,
+      gapExtension = gap,
+      substitutionMatrix = nucleotideSubstitutionMatrix(match = match, mismatch = mismatch, baseOnly = FALSE)
+    )
+    
+    alignment_score <- score(alignment)
+    percent_identity <- pid(alignment, type = "PID1")
+    
+    if (percent_identity >= perc_threshold) {
+      return(data.frame(
+        Input_ID = ids[i],
+        Input_Seq = as.character(seqs[i]),
+        DB_ID = ids2[j],
+        DB_Seq = as.character(seqs2[j]),
+        Score = alignment_score,
+        Percent_Identity = percent_identity
+      ))
+    } else {
+      return(NULL)
+    }
+  }
+  
+  # Generate all pair indices
+  pair_indices <- expand.grid(seq_along(seqs), seq_along(seqs2))
+  
+  # Export variables to the cluster workers
+  clusterExport(cl, varlist = c("seqs", "seqs2", "ids", "ids2", "gap_start", "gap", 
+                                "match", "mismatch", "align_sequences"),
+                envir = environment())
+  clusterEvalQ(cl, library(Biostrings))
+  
+  cat(green("Starting pairwise sequence alignment...\n"))
+  
+  # Perform pairwise alignment in parallel with progress bar
+  results <- pblapply(1:nrow(pair_indices), function(idx) {
+    i <- pair_indices[idx, 1]
+    j <- pair_indices[idx, 2]
+    align_sequences(i, j, seqs, seqs2, ids, ids2, gap_start, gap, match, mismatch, 95)
+  }, cl = cl)
+  
+  # Stop the cluster
+  stopCluster(cl)
+  
+  # Process matches
+  match_list <- Filter(Negate(is.null), results)
+  if (length(match_list) == 0) {
+    cat(red("No matches found.\n"))
+    return(data.frame())
+  }
+  
+  match_df <- do.call(rbind, match_list)
+  match_df <- match_df[order(match_df$Percent_Identity, decreasing = TRUE), ]
+  
+  if (k == 1) {
+    match_df <- match_df %>%
+      group_by(Input_ID) %>%
+      slice_head(n = k) %>%
+      ungroup()
+  }
+  
+  # Calculate runtime, memory, and system information
+  time <- proc.time() - start
+  memory_used <- pryr::mem_used()  # Total memory used
+  
+  # Prepare system information
+  system_info <- list(
+    R_version = R.version.string,
+    Platform = R.version$platform,
+    OS = Sys.info()["sysname"],
+    CPU_cores = detectCores(),
+    Memory_used_MB = memory_used / (1024^2),  # Convert to MB
+    Elapsed_time = time["elapsed"]
+  )
+  
+  # Log information
+  log_dir <- file.path(getwd(), "runlog")
+  if (!dir.exists(log_dir)) {
+    dir.create(log_dir)
+  }
+  
+  # Create log file name with timestamp (YYYY-MM-DD_HH-MM-SS)
+  timestamp <- format(Sys.time(), "%Y-%m-%d_%H-%M-%S")
+  log_file <- file.path(log_dir, paste0("runlog_", timestamp, ".log"))
+  
+  # Open log file for writing
+  log_con <- file(log_file, open = "w")
+  
+  # Write system information and match summary to log file
+  cat("Log file created: ", log_file, "\n", file = log_con)
+  cat("System Information:\n", file = log_con)
+  cat(paste(names(system_info), system_info, sep = ": "), file = log_con, sep = "\n")
+  cat("\nMatch Summary:\n", file = log_con)
+  cat(paste(names(attr(match_df, "match_summary")), unlist(attr(match_df, "match_summary")), sep = ": "), file = log_con, sep = "\n")
+  cat("\nFunction Version: ", ver, "\n", file = log_con)
+  
+  # Close log file
+  close(log_con)
+  
+  cat(green("Pairwise sequence alignment completed in", round(time["elapsed"], 2), "seconds.\n"))
+  
+  return(as.data.frame(match_df))
+}
+```
+
+*IMPORTANT NOTE* 
+The function: 
+
+align_sequences <- function(i, j, seqs, seqs2, ids, ids2, gap_start, gap, match, mismatch, perc_threshold) {
+    alignment <- pairwiseAlignment(
+      seqs[i], seqs2[j],
+      gapOpening = gap_start,
+      gapExtension = gap,
+      substitutionMatrix = nucleotideSubstitutionMatrix(match = match, mismatch = mismatch, baseOnly = FALSE)
+    )
+
+has one setting of interest and concern to the user *baseOnly = FALSE*. This MUST be set to false with the current deployment of the package because the reference database contains characters *Y* and *G* and otherwise wouldn't work. What this changes for how pairwiseAlignment may function if it were able to be set to TRUE is currently unknown. This remains a topic for further discussion should the issue be resovled in subsequent deployments of pairwiseAlignment. 
+
+
+# *Function 4: Filter*
+This is the final function of the full matching operation where it takes the output from all the previous functions to combine them for the user to look at in their provided metadata file. This does fall under the assumption that the user has a metadata file where the IDs are present in the metadata file, otherwise this will fail. Perhaps it would be best to put a smaller function up top to check the files beforehand to not waste precious resources. 
+```{r filter function}
+filter_func <- function(fasta, 
+                          otu.table, 
+                          meta.data, 
+                          rar.depth) {
+    fasta <- fasta %>% 
+      rename(ID = 'Input_ID', 
+             Sequence = 'Input_Seq')
+    rar.depth <- as.numeric(rar.depth)
+    #check to see if data is in proper order
+    
+    if (!"ID" %in% colnames(fasta)) {
+      stop("Error in fasta: column 'ID' does not exist")
+    }
+    if (!"Sequence" %in% colnames(fasta)) {
+      stop("Error in fasta: column 'Sequence' does not exist")
+    }
+    #check if metadata column is the correct name
+    if (!"SampleID" %in% colnames(meta.data)) {
+      stop("Error in metadata: column 'SampleID' does not exist")
+    }
+    
+    
+    #set column names to filter by. This otu table is what will be filtered
+    otu_ids <- rownames(otu.table)
+    fasta <- fasta %>% 
+      column_to_rownames(var = 'ID')
+    fasta_ids <- rownames(fasta)
+    if (length(fasta_ids) == 0) {
+      stop("Error in fasta: No IDs found in the 'ID' column.")
+    }
+    
+    #check for matches before moving on
+    if (!any(fasta_ids %in% otu_ids)) {
+      unmatched_ids <- setdiff(fasta_ids, otu_ids)
+      stop(paste0(
+        "Error in fasta: No matching OTU IDs found. ",
+        length(unmatched_ids), " IDs are unmatched."
+      ))
+    }
+    
+    #this will filter the otu table to only ids that were matched to the database because that's all we care about
+    #we will use this to find the proportion of each sample's composition of the matches to the database
+    filtered_otu.table <- otu.table[rownames(fasta_ids) %in% otu_ids,] %>%
+      filter(if_all(everything(), ~ !is.na(.)))
+    
+    
+    t.ft <- as.data.frame(t(filtered_otu.table)) %>%
+      rownames_to_column(var = 'SampleID')
+    
+    # # #create a dataframe that we can match to the metadata for later for just the proportion
+    if (!is.null(rar.depth)) {
+      prop <- t.ft %>%
+        mutate(PropAmpMatch = rowSums(across(where(is.numeric))) / rar.depth) %>%
+        select(SampleID, PropAmpMatch)
+    } else {
+      prop <- NULL
+    }
+    
+    ampcount.df <- t.ft %>%
+      mutate(AmpAbundance = rowSums(across(-SampleID, ~ ifelse(. != 0, 1, 0)))) %>% 
+      select(SampleID, AmpAbundance)
+    
+    #join to the metadata
+    meta.data2 <- meta.data %>%
+      left_join(prop, by = 'SampleID') %>%
+      left_join(ampcount.df, by = 'SampleID')
+    
+    as.data.frame(meta.data2)
+    
+    return(meta.data2)
+  }    
+```
+
+# *Full Function: AmphiBac.Match*
+This is the full function that a user would realistically use rather than using each individual step to pre-process their data. This full function incorporates all previous functions and wraps them into an automated function that processes QIIME2 artifacts post-rarefaction and returns the proportion of matches and the abundance of the matching OTUs to the user's metadata file in a by-sample fashion. 
+
+There is some redundancy that is implicit in the code such as error handling that could likely be simplified; however, currently it's necessary to ensure that the code does not run too long while there are NULL results to be returned and waste time. 
+
+```{r Amphibac.Match}
+AmphiBac.Match <- function(fasta, ver = '', otu_table = NULL, met = '', rar_depth = 'num', perc = 99) {
+  library(Biostrings)
+  if (!requireNamespace("Biostrings", quietly = TRUE)) {
+    stop("The Biostrings package is required. Please install it using BiocManager::install('Biostrings').")
+  }
+  library(crayon)
+  if (!requireNamespace("crayon", quietly = TRUE)) {
+    stop("The crayon package is required. Please install it using install.packages('crayon').")
+  }
+  library(pbapply)
+  if (!requireNamespace("pbapply", quietly = TRUE)) {
+    stop("The pbapply package is required. Please install it using install.packages('pbapply').")
+  }
+  library(tidyverse)
+  if (!requireNamespace("tidyverse", quietly = TRUE)) {
+    stop("The tidyverse package is required. Please install it using install.packages('tidyverse').")
+  }
+  library(ps)
+  if (!requireNamespace("ps", quietly = TRUE)) {
+    stop("The ps package is required. Please install it using install.packages('ps').")
+  }
+  library(parallel)
+  if (!requireNamespace("parallel", quietly = TRUE)) {
+    stop("The parallel package is required. Please install it using install.packages('parallel').")
+  }
+  library(Amphibac)
+  library(rbiom)# Check required packages
+  if (!requireNamespace("rbiom", quietly = TRUE)) {
+    stop("The rbiom package is required. Please install it using install.packages('rbiom').")
+  }
+  
+  # Bring in the OTU table
+  read.qza <- function(file) {
+    start <- proc.time()
+    unzipped_file <- unzip(file)
+    biom_path <- file.path(dirname(unzipped_file[1]), 'data')
+    biom_ending <- '\\.biom'
+    
+    find_files_with_ending <- function(folder, file_ending) {
+      # Validate the folder path
+      if (!dir.exists(folder)) {
+        stop("The specified folder does not exist.")
+      }
+      
+      # Search for files with the given ending
+      matching_files <- list.files(
+        path = folder,
+        pattern = paste0(file_ending, "$"), # Regex to match the file ending
+        full.names = TRUE                  # Include full file paths
+      )
+      return(matching_files)
+    }
+    
+    biom_table <- find_files_with_ending(biom_path, biom_ending)
+    otu <- read.biom(biom_table)
+    mat <- as.matrix(otu$count)
+    mat2 <- as.data.frame(mat)
+    final_mat <- mat2 %>%
+      select_if(~ !is.numeric(.) || sum(.) != 0)
+    
+    time <- (proc.time() - start)
+    attr(final_mat, "time") <- time["elapsed"]
+    
+    return(final_mat)
+  }
+  
+  otu_table <- read.qza(otu_table)
+  
+  ###### 1. Filter OTU table to active occurrences, i.e., no zero sums
+  otu.table <- as.data.frame(otu_table)
+  
+  ##### Check for non-zero
+  otu.table.checked <- otu.table %>% 
+    select_if(~ !is.numeric(.) || sum(.) != 0)
+  
+  ###### 2. Match sequence list to filtered OTU in step 1
+  ReadFasta <- function(fasta) {
+    read_lines <- readLines(fasta)
+    original_species <- c()
+    isolating_strain <- c()
+    sequences <- c()
+    headers <- c()
+    current_seq <- ""
+    
+    for (line in read_lines) {
+      if (startsWith(line, '>')) {
+        if (current_seq != '') {
+          sequences <- c(sequences, current_seq)
+          current_seq <- ''
+        }
+        headers <- c(headers, line)
+        
+        # Split header and handle cases without "-"
+        cleaned_header <- gsub('>', '', line)
+        split_header <- unlist(strsplit(cleaned_header, "-"))
+        
+        # Extract original species and isolating strain if available
+        original_species <- c(original_species, split_header[1])
+        isolating_strain <- c(isolating_strain, ifelse(length(split_header) > 1, split_header[2], NA))
+        
+      } else {
+        current_seq <- paste0(current_seq, line)
+      }
+    }
+    
+    if (current_seq != "") {
+      sequences <- c(sequences, current_seq)
+    }
+    
+    fasta_df <- data.frame(
+      ID = original_species,
+      isolating_strain = isolating_strain,
+      Sequence = sequences,
+      stringsAsFactors = FALSE
+    )
+    fasta_df <- fasta_df[, colSums(!is.na(fasta_df)) > 0]
+    return(fasta_df)
+  }
+  
+  fasta.df <- ReadFasta(fasta)
+  
+  ####### 3. Run pwalign on matched list from step 2
+  AmphibacMatch_Strict_clustered <- function(df, 
+                                             perc = 0, 
+                                             score = 0, 
+                                             ver = '2023') {
+    
+    # Warning on df size if necessary
+    if (nrow(df) >= 100) {
+      message(red("The data frame has more than 100 rows. This can significantly increase computation time"))
+      message('Do you wish to continue?')
+      continue <- readline(prompt = "Type 'yes' to continue or 'no' to stop: ")
+      
+      if (tolower(continue) != "yes") {
+        stop("Process stopped by user.")
+      }
+    }
+    
+    start <- proc.time()
+    
+    # Check required packages
+    if (!requireNamespace("Biostrings", quietly = TRUE)) {
+      stop("The Biostrings package is required. Please install it using BiocManager::install('Biostrings').")
+    }
+    if (!requireNamespace("crayon", quietly = TRUE)) {
+      stop("The crayon package is required. Please install it using install.packages('crayon').")
+    }
+    if (!requireNamespace("pbapply", quietly = TRUE)) {
+      stop("The pbapply package is required. Please install it using install.packages('pbapply').")
+    }
+    if (!requireNamespace("tidyverse", quietly = TRUE)) {
+      stop("The tidyverse package is required. Please install it using install.packages('tidyverse').")
+    }
+    if (!requireNamespace("ps", quietly = TRUE)) {
+      stop("The ps package is required. Please install it using install.packages('ps').")
+    }
+    if (!requireNamespace("parallel", quietly = TRUE)) {
+      stop("The parallel package is required. Please install it using install.packages('parallel').")
+    }
+    if (!requireNamespace("rbiom", quietly = TRUE)) {
+      stop("The rbiom package is required. Please install it using install.packages('rbiom').")
+    }
+    
+    library(Biostrings)
+    library(crayon)
+    library(pbapply)
+    library(tidyverse)
+    library(parallel)
+    library(ps)
+    library(rbiom)
+    
+    # Ensure the input dataframe has the necessary columns
+    if (!all(c("ID", "Sequence") %in% colnames(df))) {
+      stop("Input data frame must contain 'ID' and 'Sequence' columns.")
+    }
+    
+    # Set variables
+    gap_start = 5 
+    gap = -2 
+    match = 1 
+    mismatch = -3
+    k = 1
+    
+    # Convert sequences to DNAStringSet
+    ids <- df$ID
+    seqs <- DNAStringSet(as.character(df$Sequence))
+    ids2 <- Amphibac$species
+    seqs2 <- DNAStringSet(Amphibac$ref_seq)
+    
+    # Create a cluster with the desired number of cores
+    cl <- makeCluster(detectCores() - 1)  # Use all but 1 core
+    
+    # Define the pairwise alignment function
+    align_sequences <- function(i, j, seqs, seqs2, ids, ids2, gap_start, gap, match, mismatch, perc_threshold) {
+      alignment <- pairwiseAlignment(
+        seqs[i], seqs2[j],
+        gapOpening = gap_start,
+        gapExtension = gap,
+        substitutionMatrix = nucleotideSubstitutionMatrix(match = match, mismatch = mismatch, baseOnly = FALSE)
+      )
+      
+      alignment_score <- score(alignment)
+      percent_identity <- pid(alignment, type = "PID1")
+      
+      if (percent_identity >= perc_threshold) {
+        return(data.frame(
+          Input_ID = ids[i],
+          Input_Seq = as.character(seqs[i]),
+          DB_ID = ids2[j],
+          DB_Seq = as.character(seqs2[j]),
+          Score = alignment_score,
+          Percent_Identity = percent_identity
+        ))
+      } else {
+        return(NULL)
+      }
+    }
+    
+    # Generate all pair indices
+    pair_indices <- expand.grid(seq_along(seqs), seq_along(seqs2))
+    
+    # Export variables to the cluster workers
+    clusterExport(cl, varlist = c("seqs", "seqs2", "ids", "ids2", "gap_start", "gap", 
+                                  "match", "mismatch", "align_sequences"),
+                  envir = environment())
+    clusterEvalQ(cl, library(Biostrings))
+    
+    cat(green("Starting pairwise sequence alignment...\n"))
+    
+    # Perform pairwise alignment in parallel with progress bar
+    results <- pblapply(1:nrow(pair_indices), function(idx) {
+      i <- pair_indices[idx, 1]
+      j <- pair_indices[idx, 2]
+      align_sequences(i, j, seqs, seqs2, ids, ids2, gap_start, gap, match, mismatch, perc)
+    }, cl = cl)
+    
+    # Stop the cluster
+    stopCluster(cl)
+    
+    # Process matches
+    match_list <- Filter(Negate(is.null), results)
+    if (length(match_list) == 0) {
+      cat(red("No matches found.\n"))
+      return(data.frame())
+    }
+    
+    match_df <- do.call(rbind, match_list)
+    match_df <- match_df[order(match_df$Percent_Identity, decreasing = TRUE), ]
+    
+    if (k == 1) {
+      match_df <- match_df %>%
+        group_by(Input_ID) %>%
+        slice_head(n = k) %>%
+        ungroup()
+    }
+    
+    # Calculate runtime, memory, and system information
+    time <- proc.time() - start
+    memory_used <- pryr::mem_used()  # Total memory used
+    
+    # Prepare system information
+    system_info <- list(
+      R_version = R.version.string,
+      Platform = R.version$platform,
+      OS = Sys.info()["sysname"],
+      CPU_cores = detectCores(),
+      Memory_used_MB = memory_used / (1024^2),  # Convert to MB
+      Elapsed_time = time["elapsed"]
+    )
+    
+    # Log information
+    log_dir <- file.path(getwd(), "runlog")
+    if (!dir.exists(log_dir)) {
+      dir.create(log_dir)
+    }
+    
+    # Create log file name with timestamp (YYYY-MM-DD_HH-MM-SS)
+    timestamp <- format(Sys.time(), "%Y-%m-%d_%H-%M-%S")
+    log_file <- file.path(log_dir, paste0("runlog_", timestamp, ".log"))
+    
+    # Open log file for writing
+    log_con <- file(log_file, open = "w")
+    
+    # Write system information and match summary to log file
+    cat("Log file created: ", log_file, "\n", file = log_con)
+    cat("System Information:\n", file = log_con)
+    cat(paste(names(system_info), system_info, sep = ": "), file = log_con, sep = "\n")
+    cat("\nMatch Summary:\n", file = log_con)
+    cat(paste(names(attr(match_df, "match_summary")), unlist(attr(match_df, "match_summary")), sep = ": "), file = log_con, sep = "\n")
+    cat("\nFunction Version: ", ver, "\n", file = log_con)
+    
+    # Close log file
+    close(log_con)
+    
+    cat(green("Pairwise sequence alignment completed in", round(time["elapsed"], 2), "seconds.\n"))
+    
+    return(match_df)
+  }
+  
+  filtered.fasta <- AmphibacMatch_Strict_clustered(fasta.df, perc = 0, score = 0, ver = '2023')
+  
+  
+  
+  filter_func <- function(fasta, 
+                          otu.table, 
+                          meta.data, 
+                          rar.depth) {
+    fasta <- fasta %>%
+      dplyr::rename(ID = 'Input_ID',
+                    Sequence = 'Input_Seq')
+    rar.depth <- as.numeric(rar.depth)
+    #check to see if data is in proper order
+    
+    # if (!"ID" %in% colnames(fasta)) {
+    #   stop("Error in fasta: column 'ID' does not exist")
+    # }
+    # if (!"Sequence" %in% colnames(fasta)) {
+    #   stop("Error in fasta: column 'Sequence' does not exist")
+    # }
+    #check if metadata column is the correct name
+    if (!"SampleID" %in% colnames(meta.data)) {
+      stop("Error in metadata: column 'SampleID' does not exist")
+    }
+    
+    
+    #set column names to filter by. This otu table is what will be filtered
+    otu_ids <- rownames(otu.table)
+    fasta <- fasta %>% 
+      column_to_rownames(var = 'ID')
+    fasta_ids <- rownames(fasta)
+    if (length(fasta_ids) == 0) {
+      stop("Error in fasta: No IDs found in the 'ID' column.")
+    }
+    
+    
+    
+    #this will filter the otu table to only ids that were matched to the database because that's all we care about
+    #we will use this to find the proportion of each sample's composition of the matches to the database
+    filtered_otu.table <- otu.table[rownames(otu.table) %in% rownames(fasta),] %>%
+      filter(if_all(everything(), ~ !is.na(.)))
+    
+    #check for matches before moving on
+    # if (!identical(rownames(fasta), rownames(otu.table))) {
+    #   unmatched_ids <- setdiff(fasta_ids, otu_ids)
+    #   stop(paste0(
+    #     "Error in fasta: No matching OTU IDs found. ",
+    #     length(unmatched_ids), " IDs are unmatched."
+    #   ))
+    # }
+    
+    t.ft <- as.data.frame(t(filtered_otu.table)) %>%
+      rownames_to_column(var = 'SampleID')
+    
+    # # #create a dataframe that we can match to the metadata for later for just the proportion
+    if (!is.null(rar.depth)) {
+      prop <- t.ft %>%
+        column_to_rownames("SampleID") %>% 
+        mutate(PropAmpMatch = rowSums(across(where(is.numeric))) / 5000) %>%
+        rownames_to_column(var = 'SampleID') %>% 
+        dplyr::select(SampleID, PropAmpMatch)
+    } else {
+      prop <- NULL
+    }
+    
+    print("You've made it to past the ampcount")
+    
+    ampcount.df <- t.ft %>%
+      dplyr::mutate(AmpAbundance = rowSums(across(-SampleID, ~ ifelse(. != 0, 1, 0)))) %>% 
+      dplyr::select(SampleID, AmpAbundance)
+    
+    
+    
+    #join to the metadata
+    meta.data2 <- meta.data %>%
+      left_join(prop, by = 'SampleID') %>%
+      left_join(ampcount.df, by = 'SampleID')
+    
+    as.data.frame(meta.data2)
+    
+    return(meta.data2)
+  }     
+  metada_combination <- filter_func(fasta = filtered.fasta,
+                                    otu.table = otu.table.checked,
+                                    meta.data = met,
+                                    rar_depth)  
+}
+```
+
+
+
